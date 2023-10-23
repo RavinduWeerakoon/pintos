@@ -93,7 +93,15 @@ struct thread
     int64_t wakeup_tick;
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    // to keep track of the locks owned by the thread
+    struct list locks_owned_list;
 
+   //the lock which the thread is locked on
+    struct lock* waiting_lock;
+
+   int nice;
+   int recent_cpu;
+   
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

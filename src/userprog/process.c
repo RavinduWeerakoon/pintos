@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#define MAX_ARGS 128
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -53,7 +54,11 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
+  
+  char *args[MAX_ARGS];
+  
+  char *save_ptr;
+  int argc = 0;
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -61,11 +66,51 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  thread_current ()->loaded = success;
 
+  sema_up (&(thread_current ()->loaded_sema));
+
+  /* If load failed, quit. */
+  if (!success) {
+    thread_exit ();
+  }
+  else {    
+    /* push arguments into stack */
+    for (int i = argc - 1; i >= 0; i--) {
+      if_.esp -= strlen (args[i]) + 1;
+      strlcpy (if_.esp, args[i], strlen (args[i]) + 1);
+      args[i] = if_.esp;
+    }
+
+    /* word align */
+    while ((uint32_t)if_.esp & 3) { /* remainder when divided by 4 should be zero */
+      if_.esp -= 1;
+      *(uint8_t *)if_.esp = (uint8_t)0;
+    }
+
+    /* push argv[] */
+    if_.esp -= 4;
+    *(char **)if_.esp = (char *)0;
+    for (int i = argc - 1; i >= 0; i--) {
+      if_.esp -= 4;
+      *(char **)if_.esp = args[i];
+    }
+  
+    /* push argv */
+    if_.esp -= 4;
+    *(char ***)if_.esp = (char **)(if_.esp + 4);
+
+    /* push argc */
+    if_.esp -= 4;
+    *(int *)if_.esp = argc;
+
+    /* push fake return address */
+    if_.esp -= 4;
+    *(void **)if_.esp = (void  *)0;
+
+    /* If load failed, quit. */
+    palloc_free_page (file_name);
+  }
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its

@@ -18,6 +18,7 @@
 #define USER_LOWER_BOUND 0x08048000
 
 static void syscall_handler (struct intr_frame *);
+//lock to read and write the files.
 static struct lock filelock;
 
 
@@ -44,6 +45,7 @@ syscall_init (void)
   lock_init (&filelock);
 }
 
+//memory allocation is happened after validating the input
 static void
 syscall_handler (struct intr_frame *f) 
 {
@@ -215,3 +217,198 @@ remove (const char *file)
   return success;
 }
 
+bool
+create (const char *file, unsigned init_size)
+{
+  if (file == NULL) {
+    exit (-1);
+  }
+
+  lock_acquire (&filelock);
+  bool success = filesys_create (file, init_size);
+  lock_release (&filelock);
+  return success;
+}
+
+int
+open (const char *file)
+{
+  if (file == NULL) {
+    return -1;
+  }
+
+  lock_acquire (&filelock);
+  struct file *opened_file = filesys_open (file);
+  lock_release (&filelock);
+  struct thread *t = thread_current ();
+  int fd;
+
+  if (opened_file == NULL) {
+    return -1;
+  }
+
+  /* find empty entry in fd_table */
+  for (fd = 2; fd < MAX_FD; fd++) {
+    if (t->fd_table[fd] == NULL) break;
+  }
+  if (fd == MAX_FD) {
+    /* fd_table is full */
+    return -1;
+  }
+  else {
+    t->fd_table[fd] = opened_file;
+    return fd;
+  }
+}
+
+int
+filesize (int fd)
+{
+  if (fd >= MAX_FD || fd < 2) {
+    return 0;
+  }
+
+  struct thread *t = thread_current ();
+  struct file *opened_file = t->fd_table[fd];
+  int length;
+
+  if (opened_file == NULL) {
+    return 0;
+  }
+
+  lock_acquire (&filelock);
+  length = file_length (opened_file);
+  lock_release (&filelock);
+
+  return length;
+}
+
+int
+read (int fd, void *buffer, unsigned size)
+{
+  if (fd >= MAX_FD || fd < 0) {
+    return 0;
+  }
+
+  struct file *file;
+  struct thread *t = thread_current ();
+  unsigned read_cnt = 0;
+
+  lock_acquire (&filelock);
+  if (fd == 0) {
+    while (read_cnt <= size) {
+      /* read key by input_getc() and write it into buffer at appropriate position */
+      *(char *)(buffer + read_cnt++) = input_getc ();
+    }
+    lock_release (&filelock);
+    return read_cnt;
+  }
+
+  /* get file from fd */
+  file = t->fd_table[fd];
+  
+  if (file == NULL) {
+    lock_release (&filelock);
+    return 0;
+  }
+
+  read_cnt = file_read (file, buffer, size);
+  lock_release (&filelock);
+  return (int)read_cnt;
+}
+
+int
+write (int fd, const void *buffer, unsigned size)
+{
+  if (fd >= MAX_FD || fd < 0) {
+    return 0;
+  }
+
+  struct file *file;
+  struct thread *t = thread_current ();
+  int write_cnt = size;
+  
+  lock_acquire (&filelock);
+  if (fd == 1) {
+    putbuf (buffer, size);
+    lock_release (&filelock);
+    return write_cnt;
+  }
+
+  /* get file from fd */
+  file = t->fd_table[fd];
+
+  if (file == NULL) {
+    lock_release (&filelock);
+    return 0;
+  }
+
+  write_cnt = file_write (file, buffer, size);
+  lock_release (&filelock);
+  return write_cnt;
+}
+
+void
+seek (int fd, unsigned position)
+{
+  if (fd >= MAX_FD || fd < 2) {
+    return;
+  }
+
+  struct thread *t = thread_current ();
+  struct file *opened_file = t->fd_table[fd];
+  
+  if (opened_file == NULL) {
+    return;
+  }
+
+  lock_acquire (&filelock);
+  file_seek (opened_file, position);
+  lock_release (&filelock);
+}
+
+unsigned
+tell (int fd)
+{
+  if (fd >= MAX_FD || fd < 2) {
+    return 0;
+  }
+
+  struct thread *t = thread_current ();
+  struct file *opened_file = t->fd_table[fd];
+  int next;
+  
+  if (opened_file == NULL) {
+    return 0;
+  }
+
+  lock_acquire (&filelock);
+  next = file_tell (opened_file);
+  lock_release (&filelock);
+
+  return (unsigned) next;
+}
+
+void
+close (int fd)
+{
+  if (fd >= MAX_FD || fd < 0) {
+    return;
+  }
+
+  struct thread *t = thread_current ();
+  struct file *opened_file = t->fd_table[fd];  
+
+  if (fd == 0 || fd == 1) {
+    return;
+  }
+  
+  if (opened_file == NULL) {
+    return;
+  }
+
+  lock_acquire (&filelock);
+  file_close (opened_file);
+  lock_release (&filelock);
+  t->fd_table[fd] = NULL;
+}

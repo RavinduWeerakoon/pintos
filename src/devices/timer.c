@@ -24,7 +24,6 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
-
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
@@ -38,7 +37,6 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
-  
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -86,61 +84,16 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-/* Sleeps for approximately TICKS timer ticks.  Interrupts must be turned on. */
-
-
-bool ticks_cmp(
-    const struct list_elem *a,
-    const struct list_elem *b,
-    void *aux UNUSED
-) {
-    struct thread *ta = list_entry(a, struct thread, elem);
-    struct thread *tb = list_entry(b, struct thread, elem);
-
- 
-    if ((ta -> ticks) > (tb -> ticks)) {
-        return false;
-    } else {
-        return true;
-    }
-}
-
-
+/* Sleeps for approximately TICKS timer ticks.  Interrupts must
+   be turned on. */
 void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-  struct thread *get_current_thread;
-  enum intr_level old_level;
 
-  // ASSERT (intr_get_level () == INTR_ON);
-  
-  // while (timer_elapsed (start) < ticks) {
-  //   thread_yield ();
-  // }
-
-  //my code starts from here
-
-      if (ticks > 0) {
-        old_level = intr_disable();
-        get_current_thread = thread_current();
-  
-        get_current_thread -> ticks = ticks + timer_ticks();
-
-
-        list_insert_ordered(
-            &sleep_list,
-            &get_current_thread -> elem,
-            (list_less_func *)&ticks_cmp,
-            NULL
-        );
-
-        thread_block();
-        intr_set_level(old_level);
-    }
-
-
-  
+  ASSERT (intr_get_level () == INTR_ON);
+  while (timer_elapsed (start) < ticks) 
+    thread_yield ();
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -217,20 +170,8 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
-  struct list_elem *temp_elem;
   ticks++;
   thread_tick ();
-
-  temp_elem = list_begin(&sleep_list);
-    while (temp_elem != list_end(&sleep_list)) {
-        struct thread *t = list_entry(temp_elem, struct thread, elem);
-        if (ticks < t -> ticks) {
-            break;
-        }
-        list_remove(temp_elem);
-        thread_unblock(t);
-        temp_elem = list_begin(&sleep_list);
-    }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

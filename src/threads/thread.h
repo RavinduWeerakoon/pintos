@@ -24,6 +24,20 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#ifdef USERPROG
+
+#define MAX_FD 128			/* Maximum number of opened files */
+#define MAX_DEPTH 31			/* Maximum number of depth for threads */
+
+struct child {
+  tid_t child_tid;
+  char child_name[16];
+  struct list_elem elem;
+  struct semaphore sema;
+  int status;
+};
+
+#endif
 
 /* A kernel thread or user process.
 
@@ -89,29 +103,24 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    struct list_elem allelem;          /* List element for all threads list. */
-    int ticks;                           /*ticks to be wakeup*/
-    int64_t wakeup_tick;
+    struct list_elem allelem;           /* List element for all threads list. */
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    // to keep track of the locks owned by the thread
-    struct list locks_owned_list;
 
-   //the lock which the thread is locked on
-    struct lock* waiting_lock;
-    //semaphore for parent info
-    struct semaphore parent_sema;
-    struct semaphore loaded_sema;
-
-   int nice;
-   int recent_cpu;
-   bool loaded;
-   
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct file *fd_table[MAX_FD];	/* file descriptor table */
+    tid_t parent_tid;			/* parent thread's tid */
+    struct semaphore parent_sema;	/* semaphore for parent info */
+    struct semaphore loaded_sema;
+    bool loaded;
+    struct list child_list;		/* list of struct child */
+    struct child child_info;
+    int depth;				/* how deep the thread is (to adjust to recursive exec ()) */
+    struct file* exec_file;		/* pointer to the file that this thread will execute */
 #endif
-
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -152,10 +161,12 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-struct list sleep_list;
+struct list* get_readylist (void);
 
-bool priority_cmp(const struct list_elem *a,const struct list_elem *b,void *aux UNUSED);
-
-
+#ifdef USERPROG
+struct list* get_childlist (void);
+struct child *get_child_from_tid (tid_t);
+struct thread *get_thread_from_tid (tid_t);
+#endif
 
 #endif /* threads/thread.h */

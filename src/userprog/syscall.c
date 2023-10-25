@@ -168,12 +168,12 @@ exit (int status)
   struct thread *parent_t = get_thread_from_tid (parent_tid);
   if (parent_t != NULL) {
     struct child *ch = NULL;
-    struct list *child_list_of_par = &parent_t->child_list;
+    struct list *parent_child_list = &parent_t->child_list;
     struct list_elem *e;
 
     //travrese the list and find the current thread
   
-    for (e = list_begin (child_list_of_par); e != list_end (child_list_of_par);
+    for (e = list_begin (parent_child_list); e != list_end (parent_child_list);
          e = list_next (e)) {
       ch = list_entry (e, struct child, elem);
       if (ch->child_tid == cur->tid)

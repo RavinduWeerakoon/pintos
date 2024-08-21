@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "filesys/file.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -283,6 +284,7 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
+  file_close (thread_current ()->exec_file);
   process_exit ();
 #endif
 
@@ -464,6 +466,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+#ifdef USERPROG
+  list_init (&t->child_list);
+  sema_init (&t->parent_sema, 0);
+  sema_init (&t->loaded_sema, 0);
+#endif
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -579,6 +587,45 @@ allocate_tid (void)
   return tid;
 }
 
+struct list*
+get_readylist (void)
+{
+  return &ready_list;
+}
+
+struct list*
+get_childlist (void) 
+{
+  return &(thread_current ()->child_list);
+}
+
+struct child*
+get_child_from_tid (tid_t child_tid)
+{
+  struct list *child_list = get_childlist ();
+  struct list_elem *e;
+
+  for (e = list_begin (child_list); e != list_end (child_list); e = list_next (e)) {
+    struct child *ch = list_entry (e, struct child, elem);
+    if (ch->child_tid == child_tid)
+      return ch;
+  }
+  return NULL;
+}
+
+struct thread*
+get_thread_from_tid (tid_t tid)
+{
+  struct list_elem *e;
+
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)) {
+    struct thread *t = list_entry (e, struct thread, allelem);
+    if (t->tid == tid)
+      return t;
+  }
+  return NULL;
+}
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);

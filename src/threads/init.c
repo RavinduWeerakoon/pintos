@@ -133,7 +133,86 @@ pintos_init (void)
     /* Run actions specified on kernel command line. */
     run_actions (argv);
   } else {
-    // TODO: no command line passed to kernel. Run interactively 
+   
+    //main conole loop
+
+      
+      while(1)  {
+
+      int i = 0;
+
+      char word[256]; 
+      
+      printf("CS2043> ");
+      
+      while(1){
+        uint8_t c = input_getc();
+
+        if(c == (uint8_t) '\r'){
+          puts(" ");
+          break;
+          
+        }
+
+      if(c == (uint8_t) '\b'){
+      
+      if(i>0){
+        printf("\b \b");
+        i--;
+        word[i]= '\0';
+        
+        
+      }
+      continue;
+      }
+        putchar(c);
+
+        char letter = (char) c;
+        word[i] = c;
+        i++;
+
+      }
+
+      word[i] = '\0';
+
+      if(strcmp(word,"whoami")==0){
+        
+        puts("Ravindu Weerakoon 210685N");
+      
+      }else if(strcmp(word,"shutdown")==0){
+
+        shutdown_power_off();
+        
+      }else if(strcmp(word,"exit")==0){
+        printf("Exiting interactive shell... :(\n");
+        break;
+        
+        
+      }else if(strcmp(word, "time")==0){
+        
+        time_t t = rtc_get_time();
+        printf("Number of seconds since the unix epoch %lu\n",t);
+        
+      }else if(!strcmp(word,"ram")){
+          
+          printf ("Ram size %d kb\n",
+          init_ram_pages * PGSIZE / 1024);
+
+      }else if(!strcmp(word,"thread")){
+
+        thread_print_stats();
+
+      }else if(!strcmp(word,"priority")){
+        
+        printf("The Thread priority is %d \n", thread_get_priority());
+      
+      }
+      
+      else{
+        puts("Invalid Command");
+      }
+    }
+
   }
 
   /* Finish up. */
